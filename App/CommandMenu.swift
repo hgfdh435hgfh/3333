@@ -281,6 +281,8 @@ struct CommandRow: View {
                         Text(value).foregroundStyle(palette.text.opacity(0.75))
                             .lineLimit(1).truncationMode(.middle)
                             .frame(maxWidth: 130, alignment: .trailing)
+                            // Only as wide as the value needs (up to 130), so a short value leaves room for the help line.
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                     if command.argument == .choices {
                         Image(systemName: "chevron.right")
