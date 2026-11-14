@@ -23,7 +23,8 @@ jobs:
   ipa:
     # Intel image: the arm64 macOS pool was leaving jobs queued until they timed out.
     runs-on: macos-15-intel
-    timeout-minutes: 45
+    # A slow runner has needed 43 minutes for the steps alone, and 45 then cancelled a job whose steps had all passed.
+    timeout-minutes: 75
     env:
       BUNDLE_ID: io.github.hgfh34bnvcn.termai
     steps:
@@ -77,18 +78,31 @@ jobs:
             -derivedDataPath build/sim \
             CODE_SIGNING_ALLOWED=NO
           xcrun simctl boot "$UDID"
+          # Shut the simulator down on the way out: the runner's end-of-job cleanup spent over 100 s reaping a booted one.
+          trap 'xcrun simctl shutdown "$UDID" || true' EXIT
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" build/sim/Build/Products/Debug-iphonesimulator/TermAI.app
           mkdir -p shots
+          # Until the app draws its first frame the screen is the blank launch screen, a PNG of about 75 KB;
+          # the smallest real screen is over 300 KB.
+          drawn() { [ "$(($(wc -c < "$1")))" -gt 150000 ]; }
           shoot() {
             name=$1; shift
             xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo "$@"
-            sleep 15
+            # Wait for the first frame, up to 90 s, instead of a fixed time: a busy runner has needed more than 15 s.
+            for _ in $(seq 30); do
+              sleep 3
+              xcrun simctl io "$UDID" screenshot "shots/$name.png" >/dev/null 2>&1 || true
+              if [ -f "shots/$name.png" ] && drawn "shots/$name.png"; then break; fi
+            done
+            sleep 5  # sheets are still animating in on the first frame
             xcrun simctl io "$UDID" screenshot "shots/$name.png"
+            drawn "shots/$name.png" || echo "::warning::shots/$name.png still shows the launch screen after 90 s"
             xcrun simctl terminate "$UDID" "$BUNDLE_ID"
             sleep 3
           }
-          # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
+          # The first launch on a fresh simulator is by far the slowest; get it out of the way so it does not
+          # eat into the first shot's 90 s.
           xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
           sleep 45
           xcrun simctl terminate "$UDID" "$BUNDLE_ID"
