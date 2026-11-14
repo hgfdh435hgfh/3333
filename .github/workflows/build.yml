@@ -101,7 +101,8 @@ jobs:
             xcrun simctl terminate "$UDID" "$BUNDLE_ID"
             sleep 3
           }
-          # The first launch on a fresh simulator is slow; warm it up so no shot catches the launch screen.
+          # The first launch on a fresh simulator is by far the slowest; get it out of the way so it does not
+          # eat into the first shot's 90 s.
           xcrun simctl launch "$UDID" "$BUNDLE_ID" -demo
           sleep 45
           xcrun simctl terminate "$UDID" "$BUNDLE_ID"
